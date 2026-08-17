@@ -877,7 +877,7 @@ INDEX_HTML = """
       <div class="analysis-grid">
         <div class="panel">
           <div class="panel-title"><span class="dot"></span> Emotion Breakdown</div>
-          <div class="chart-wrap"><canvas id="emotionChart"></canvas></div>
+          <div class="chart-wrap" id="emotionChartWrap"></div>
           <div class="emotion-legend" id="emotionLegend"></div>
         </div>
         <div class="panel">
@@ -893,7 +893,6 @@ INDEX_HTML = """
   <div class="footer">Built with <b>Flask</b> · TF-IDF + Naive Bayes · Crafted for a premium experience</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script>
   const body = document.body;
   const themeDots = document.querySelectorAll('.theme-dot');
@@ -903,7 +902,9 @@ INDEX_HTML = """
       dot.classList.add('active');
       body.setAttribute('data-theme', dot.dataset.theme);
       localStorage.setItem('sentimentiq-theme', dot.dataset.theme);
-      if (window.lastEmotions) renderEmotionChart(window.lastEmotions);
+      if (window.lastEmotions) {
+        try { renderEmotionChart(window.lastEmotions); } catch (e) { /* ignore */ }
+      }
     });
   });
 
@@ -956,58 +957,80 @@ INDEX_HTML = """
     anticipation: { emoji: '🤩', color: '#fb923c' },
   };
 
-  let emotionChart = null;
-
   function themeColor(varName) {
     return getComputedStyle(document.body).getPropertyValue(varName).trim();
   }
 
+  /* Self-contained SVG radar chart — no external chart library required,
+     so the app never depends on a CDN being reachable. */
   function renderEmotionChart(emotions) {
-    const canvas = document.getElementById('emotionChart');
-    const labels = Object.keys(emotions).map(k => k.charAt(0).toUpperCase() + k.slice(1));
-    const values = Object.values(emotions);
-    const accent = themeColor('--accent') || '#7c5cff';
-    const textMuted = themeColor('--text-muted') || '#b9b4d6';
-    const gridColor = 'rgba(150,150,180,0.18)';
+    const wrap = document.getElementById('emotionChartWrap');
+    const entries = Object.entries(emotions);
+    const n = entries.length;
+    if (!n) { wrap.innerHTML = ''; return; }
 
-    if (emotionChart) {
-      emotionChart.destroy();
-    }
-    emotionChart = new Chart(canvas.getContext('2d'), {
-      type: 'radar',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Emotion intensity',
-          data: values,
-          backgroundColor: accent + '33',
-          borderColor: accent,
-          borderWidth: 2,
-          pointBackgroundColor: accent,
-          pointBorderColor: '#fff',
-          pointRadius: 3,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 700, easing: 'easeOutQuart' },
-        scales: {
-          r: {
-            angleLines: { color: gridColor },
-            grid: { color: gridColor },
-            pointLabels: { color: textMuted, font: { size: 11, family: 'Poppins' } },
-            ticks: { display: false, backdropColor: 'transparent' },
-            suggestedMin: 0,
-            suggestedMax: 100,
-          }
-        },
-        plugins: { legend: { display: false } }
+    const size = 260;
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = size / 2 - 46;
+    const rings = 4;
+    const accent = themeColor('--accent') || '#7c5cff';
+    const accent2 = themeColor('--accent-2') || '#ff6ec7';
+    const textMuted = themeColor('--text-muted') || '#b9b4d6';
+    const gridColor = 'rgba(150,150,180,0.28)';
+
+    const angleFor = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
+    const pointAt = (i, value) => {
+      const a = angleFor(i);
+      const r = (Math.max(0, Math.min(100, value)) / 100) * radius;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    };
+
+    let svg = `<svg viewBox="0 0 ${size} ${size}" width="100%" height="100%" style="overflow:visible">`;
+    svg += `<defs>
+      <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.55"/>
+        <stop offset="100%" stop-color="${accent2}" stop-opacity="0.12"/>
+      </radialGradient>
+    </defs>`;
+
+    // Grid rings
+    for (let ring = 1; ring <= rings; ring++) {
+      const r = (radius * ring) / rings;
+      let ringPts = [];
+      for (let i = 0; i < n; i++) {
+        const a = angleFor(i);
+        ringPts.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`);
       }
+      svg += `<polygon points="${ringPts.join(' ')}" fill="none" stroke="${gridColor}" stroke-width="1"/>`;
+    }
+
+    // Axis lines + labels
+    entries.forEach(([emo], i) => {
+      const [ax, ay] = pointAt(i, 100);
+      svg += `<line x1="${cx}" y1="${cy}" x2="${ax}" y2="${ay}" stroke="${gridColor}" stroke-width="1"/>`;
+      const meta = EMOTION_META[emo] || { emoji: '•' };
+      const labelR = radius + 24;
+      const a = angleFor(i);
+      const lx = cx + labelR * Math.cos(a);
+      const ly = cy + labelR * Math.sin(a);
+      const anchor = Math.cos(a) > 0.3 ? 'start' : Math.cos(a) < -0.3 ? 'end' : 'middle';
+      svg += `<text x="${lx}" y="${ly}" fill="${textMuted}" font-size="10.5" font-family="Poppins, sans-serif" text-anchor="${anchor}" dominant-baseline="middle">${meta.emoji} ${emo.charAt(0).toUpperCase() + emo.slice(1)}</text>`;
     });
 
+    // Data polygon
+    const dataPts = entries.map(([emo, val], i) => pointAt(i, val));
+    svg += `<polygon points="${dataPts.map(p => p.join(',')).join(' ')}" fill="url(#radarFill)" stroke="${accent}" stroke-width="2" stroke-linejoin="round"/>`;
+    dataPts.forEach(([x, y]) => {
+      svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="${accent}" stroke="#fff" stroke-width="1.2"/>`;
+    });
+
+    svg += `</svg>`;
+    wrap.innerHTML = svg;
+
     emotionLegend.innerHTML = '';
-    Object.entries(emotions)
+    entries
+      .slice()
       .sort((a, b) => b[1] - a[1])
       .forEach(([emo, val]) => {
         const meta = EMOTION_META[emo] || { emoji: '•', color: accent };
@@ -1058,20 +1081,33 @@ INDEX_HTML = """
     spinner.style.display = 'inline-block';
     btnLabel.textContent = 'Analyzing...';
 
+    let data = null;
     try {
       const res = await fetch('/predict', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
       });
-      const data = await res.json();
+      data = await res.json();
 
       if (!res.ok) {
         errorBox.textContent = data.error || 'Something went wrong.';
         errorBox.style.display = 'block';
         return;
       }
+    } catch (err) {
+      errorBox.textContent = 'Network error: could not reach the server.';
+      errorBox.style.display = 'block';
+      return;
+    } finally {
+      analyzeBtn.disabled = false;
+      spinner.style.display = 'none';
+      btnLabel.textContent = 'Analyze Sentiment ✨';
+    }
 
+    // Rendering runs separately from the network call — a display glitch here
+    // should never be reported as a "network error".
+    try {
       const isPositive = data.sentiment === 'positive';
       badge.className = 'badge ' + (isPositive ? 'positive' : 'negative');
       badge.textContent = (isPositive ? '😊 Positive' : '☹️ Negative');
@@ -1093,17 +1129,17 @@ INDEX_HTML = """
         });
       });
 
-      if (data.emotions) { window.lastEmotions = data.emotions; renderEmotionChart(data.emotions); }
-      renderSentences(data.sentences);
+      if (data.emotions) {
+        window.lastEmotions = data.emotions;
+        try { renderEmotionChart(data.emotions); } catch (chartErr) { /* chart is a bonus, never block results */ }
+      }
+      try { renderSentences(data.sentences); } catch (sentErr) { /* same here */ }
 
       resultBox.style.display = 'block';
-    } catch (err) {
-      errorBox.textContent = 'Network error: could not reach the server.';
-      errorBox.style.display = 'block';
-    } finally {
-      analyzeBtn.disabled = false;
-      spinner.style.display = 'none';
-      btnLabel.textContent = 'Analyze Sentiment ✨';
+    } catch (renderErr) {
+      // Something in the display logic failed, but we still have valid data —
+      // surface a gentle notice instead of a scary "network error".
+      resultBox.style.display = 'block';
     }
   }
 
