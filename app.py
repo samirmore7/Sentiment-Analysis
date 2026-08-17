@@ -121,7 +121,7 @@ INDEX_HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SentimentIQ — Premium Sentiment Analysis</title>
+<title>SentiSense AI — Premium Sentiment Analysis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -144,7 +144,7 @@ INDEX_HTML = """
     --transition: all 0.35s cubic-bezier(.4,0,.2,1);
   }
 
-  /* ---------- Theme variants ---------- */
+  /* ---------- Theme variants (dark) ---------- */
   body[data-theme="midnight"] {
     --bg-1: #0f0c29; --bg-2: #302b63; --bg-3: #24243e;
     --accent: #7c5cff; --accent-2: #ff6ec7;
@@ -168,6 +168,69 @@ INDEX_HTML = """
   body[data-theme="ocean"] {
     --bg-1: #001220; --bg-2: #023047; --bg-3: #011627;
     --accent: #38bdf8; --accent-2: #22d3ee;
+  }
+  body[data-theme="obsidian"] {
+    --bg-1: #030303; --bg-2: #1a1a1a; --bg-3: #0a0a0a;
+    --accent: #a3a3a3; --accent-2: #ffffff;
+  }
+  body[data-theme="crimson"] {
+    --bg-1: #1a0505; --bg-2: #4d0e0e; --bg-3: #2b0808;
+    --accent: #ef4444; --accent-2: #f97316;
+  }
+
+  /* ---------- Theme variants (light) ---------- */
+  body[data-theme="daylight"] {
+    --bg-1: #eef1fb; --bg-2: #dbe4ff; --bg-3: #f7f8fd;
+    --accent: #6366f1; --accent-2: #ec4899;
+    --card-bg: rgba(255,255,255,0.65);
+    --card-border: rgba(30,27,75,0.10);
+    --text-main: #1e1b3a;
+    --text-muted: #5b5680;
+  }
+  body[data-theme="linen"] {
+    --bg-1: #fdf6ec; --bg-2: #fbe8d3; --bg-3: #fffaf3;
+    --accent: #f59e0b; --accent-2: #f97316;
+    --card-bg: rgba(255,255,255,0.65);
+    --card-border: rgba(120,80,20,0.12);
+    --text-main: #3a2e1a;
+    --text-muted: #7a6a4d;
+  }
+  body[data-theme="mint"] {
+    --bg-1: #ecfdf5; --bg-2: #d1fae5; --bg-3: #f4fefb;
+    --accent: #10b981; --accent-2: #06b6d4;
+    --card-bg: rgba(255,255,255,0.65);
+    --card-border: rgba(6,78,59,0.10);
+    --text-main: #0b2e26;
+    --text-muted: #4b6e63;
+  }
+
+  body[data-theme="daylight"]::before, body[data-theme="daylight"]::after,
+  body[data-theme="linen"]::before, body[data-theme="linen"]::after,
+  body[data-theme="mint"]::before, body[data-theme="mint"]::after {
+    opacity: 0.28;
+  }
+
+  body[data-theme="daylight"] textarea, body[data-theme="linen"] textarea, body[data-theme="mint"] textarea {
+    background: rgba(255,255,255,0.55);
+    color: var(--text-main);
+  }
+  body[data-theme="daylight"] .btn-analyze,
+  body[data-theme="linen"] .btn-analyze,
+  body[data-theme="mint"] .btn-analyze {
+    color: #fff;
+  }
+  body[data-theme="daylight"] .result-card, body[data-theme="linen"] .result-card, body[data-theme="mint"] .result-card {
+    background: rgba(255,255,255,0.5);
+  }
+  body[data-theme="daylight"] .prob-bar-bg, body[data-theme="linen"] .prob-bar-bg, body[data-theme="mint"] .prob-bar-bg {
+    background: rgba(30,27,75,0.08);
+  }
+  body[data-theme="daylight"] .chip, body[data-theme="linen"] .chip, body[data-theme="mint"] .chip {
+    background: rgba(255,255,255,0.5);
+  }
+  body[data-theme="daylight"] .spinner, body[data-theme="linen"] .spinner, body[data-theme="mint"] .spinner {
+    border: 2.5px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -268,6 +331,13 @@ INDEX_HTML = """
   .theme-dot[data-theme="royal"]    { background: linear-gradient(135deg,#eab308,#f59e0b); }
   .theme-dot[data-theme="rose"]     { background: linear-gradient(135deg,#f43f5e,#fb7185); }
   .theme-dot[data-theme="ocean"]    { background: linear-gradient(135deg,#38bdf8,#22d3ee); }
+  .theme-dot[data-theme="obsidian"] { background: linear-gradient(135deg,#1a1a1a,#a3a3a3); }
+  .theme-dot[data-theme="crimson"]  { background: linear-gradient(135deg,#ef4444,#f97316); }
+  .theme-dot[data-theme="daylight"] { background: linear-gradient(135deg,#6366f1,#ec4899); border-color: rgba(0,0,0,0.15); }
+  .theme-dot[data-theme="linen"]    { background: linear-gradient(135deg,#f59e0b,#f97316); border-color: rgba(0,0,0,0.15); }
+  .theme-dot[data-theme="mint"]     { background: linear-gradient(135deg,#10b981,#06b6d4); border-color: rgba(0,0,0,0.15); }
+
+  .theme-picker { flex-wrap: wrap; max-width: 320px; }
 
   /* ---------- Hero ---------- */
   .hero { text-align: center; margin-bottom: 34px; }
@@ -482,7 +552,7 @@ INDEX_HTML = """
     <div class="brand">
       <div class="brand-icon">🧠</div>
       <div>
-        <h1>SentimentIQ</h1>
+        <h1>SentiSense AI</h1>
         <span>Premium NLP Sentiment Engine</span>
       </div>
     </div>
@@ -493,6 +563,11 @@ INDEX_HTML = """
       <div class="theme-dot" data-theme="royal" title="Royal Gold"></div>
       <div class="theme-dot" data-theme="rose" title="Rose"></div>
       <div class="theme-dot" data-theme="ocean" title="Ocean"></div>
+      <div class="theme-dot" data-theme="obsidian" title="Obsidian"></div>
+      <div class="theme-dot" data-theme="crimson" title="Crimson"></div>
+      <div class="theme-dot" data-theme="daylight" title="Daylight (light)"></div>
+      <div class="theme-dot" data-theme="linen" title="Linen (light)"></div>
+      <div class="theme-dot" data-theme="mint" title="Mint (light)"></div>
     </div>
   </div>
 
