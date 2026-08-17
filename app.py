@@ -68,6 +68,151 @@ def predict_sentiment(text: str):
 
 
 # --------------------------------------------------------------------------
+# Sentence splitting & formatting
+# --------------------------------------------------------------------------
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "vs", "etc", "e.g", "i.e", "u.s", "u.k"}
+
+
+def split_sentences(text: str):
+    """Split a block of text into cleaned, properly-capitalized sentences."""
+    text = text.strip()
+    if not text:
+        return []
+
+    # Normalize stray whitespace first
+    text = re.sub(r"\s+", " ", text)
+
+    raw_parts = _SENTENCE_SPLIT_RE.split(text)
+    sentences = []
+    for part in raw_parts:
+        part = part.strip()
+        if not part:
+            continue
+        # Guard against false splits on common abbreviations (rough heuristic)
+        last_word = re.findall(r"[A-Za-z\.]+$", part)
+        if last_word and last_word[0].lower().rstrip(".") in _ABBREVIATIONS and sentences:
+            sentences[-1] = sentences[-1] + " " + part
+            continue
+        sentences.append(part)
+
+    return [format_sentence(s) for s in sentences if s]
+
+
+def format_sentence(sentence: str) -> str:
+    """Guess the correct display format for a sentence: capitalize the first
+    letter and ensure it ends with sensible punctuation."""
+    s = sentence.strip()
+    if not s:
+        return s
+    # Capitalize first alphabetic character
+    for i, ch in enumerate(s):
+        if ch.isalpha():
+            s = s[:i] + ch.upper() + s[i + 1:]
+            break
+    # Ensure terminal punctuation
+    if s[-1] not in ".!?\"'":
+        s += "."
+    return s
+
+
+# --------------------------------------------------------------------------
+# Lightweight lexicon-based emotion analysis (Plutchik's 8 core emotions)
+# --------------------------------------------------------------------------
+
+EMOTION_LEXICON = {
+    "joy": [
+        "happy", "joy", "joyful", "glad", "delighted", "pleased", "cheerful", "great",
+        "excellent", "wonderful", "fantastic", "amazing", "love", "loved", "loving",
+        "awesome", "fun", "excited", "smile", "smiling", "grateful", "blessed",
+        "beautiful", "brilliant", "perfect", "enjoy", "enjoyed", "enjoying", "delightful",
+    ],
+    "trust": [
+        "trust", "trusted", "reliable", "honest", "loyal", "confident", "dependable",
+        "secure", "safe", "faithful", "genuine", "sincere", "assured", "credible",
+        "solid", "supportive", "authentic",
+    ],
+    "fear": [
+        "afraid", "scared", "fear", "fearful", "terrified", "anxious", "worried",
+        "nervous", "panic", "dread", "horrified", "frightened", "threatened",
+        "insecure", "uneasy", "alarmed", "apprehensive",
+    ],
+    "surprise": [
+        "surprised", "surprising", "shocked", "shocking", "unexpected", "astonished",
+        "amazed", "stunned", "startled", "unbelievable", "sudden", "wow", "unforeseen",
+    ],
+    "sadness": [
+        "sad", "sadness", "unhappy", "depressed", "disappointed", "disappointing",
+        "heartbroken", "gloomy", "miserable", "sorrow", "regret", "cry", "crying",
+        "upset", "hurt", "lonely", "grief", "down", "hopeless",
+    ],
+    "disgust": [
+        "disgust", "disgusting", "gross", "revolting", "nasty", "awful", "yuck",
+        "repulsive", "distasteful", "sick", "vile", "unpleasant", "foul",
+    ],
+    "anger": [
+        "angry", "anger", "furious", "mad", "annoyed", "annoying", "irritated",
+        "outraged", "rage", "hate", "hated", "hateful", "hostile", "frustrated",
+        "frustrating", "resent", "bitter", "infuriating",
+    ],
+    "anticipation": [
+        "excited", "eager", "hopeful", "anticipate", "anticipating", "looking",
+        "forward", "expect", "expecting", "curious", "ready", "await", "awaiting",
+        "planning", "optimistic",
+    ],
+}
+
+EMOTION_META = {
+    "joy": {"emoji": "😄", "color": "#facc15"},
+    "trust": {"emoji": "🤝", "color": "#34d399"},
+    "fear": {"emoji": "😨", "color": "#a78bfa"},
+    "surprise": {"emoji": "😲", "color": "#38bdf8"},
+    "sadness": {"emoji": "😢", "color": "#60a5fa"},
+    "disgust": {"emoji": "🤢", "color": "#84cc16"},
+    "anger": {"emoji": "😠", "color": "#f87171"},
+    "anticipation": {"emoji": "🤩", "color": "#fb923c"},
+}
+
+_WORD_RE = re.compile(r"[a-zA-Z']+")
+
+
+def analyze_emotions(text: str, sentiment_label: str = None):
+    """Return a dict of emotion -> percentage score (0-100) based on a
+    lightweight keyword lexicon. Falls back to a sentiment-informed baseline
+    when no lexicon words are found so the chart is never completely empty."""
+    words = [w.lower() for w in _WORD_RE.findall(text)]
+    raw_scores = {emo: 0 for emo in EMOTION_LEXICON}
+
+    for w in words:
+        for emo, vocab in EMOTION_LEXICON.items():
+            if w in vocab:
+                raw_scores[emo] += 1
+
+    total_hits = sum(raw_scores.values())
+
+    if total_hits == 0:
+        # Fallback baseline informed by overall sentiment so the radar chart
+        # still tells a sensible, non-empty story.
+        if sentiment_label == "positive":
+            baseline = {"joy": 55, "trust": 40, "anticipation": 35, "surprise": 15,
+                        "sadness": 8, "anger": 5, "fear": 5, "disgust": 5}
+        elif sentiment_label == "negative":
+            baseline = {"sadness": 45, "anger": 40, "disgust": 30, "fear": 25,
+                        "joy": 5, "trust": 8, "surprise": 10, "anticipation": 8}
+        else:
+            baseline = {emo: 20 for emo in EMOTION_LEXICON}
+        return {emo: baseline.get(emo, 10) for emo in EMOTION_LEXICON}
+
+    # Normalize so the strongest emotion sits near 100 for a readable radar chart
+    max_hit = max(raw_scores.values()) or 1
+    scores = {emo: round((val / max_hit) * 100) for emo, val in raw_scores.items()}
+    # Give every emotion a small floor so the radar shape doesn't collapse to zero
+    scores = {emo: max(val, 4) for emo, val in scores.items()}
+    return scores
+
+
+# --------------------------------------------------------------------------
 # Routes
 # --------------------------------------------------------------------------
 
@@ -97,12 +242,36 @@ def predict():
 
     sentiment = label.lower()
     is_positive = "pos" in sentiment or sentiment == "1"
+    overall_sentiment = "positive" if is_positive else "negative" if "neg" in sentiment or sentiment == "0" else sentiment
+
+    emotions = analyze_emotions(text, overall_sentiment)
+
+    # Sentence-level breakdown, each sentence auto-formatted (capitalized +
+    # correct terminal punctuation) and individually classified.
+    sentences_out = []
+    try:
+        for sent in split_sentences(text)[:25]:
+            try:
+                s_label, s_conf, _ = predict_sentiment(sent)
+                s_sentiment = s_label.lower()
+                s_is_pos = "pos" in s_sentiment or s_sentiment == "1"
+                sentences_out.append({
+                    "text": sent,
+                    "sentiment": "positive" if s_is_pos else "negative",
+                    "confidence": s_conf,
+                })
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception:  # noqa: BLE001
+        sentences_out = []
 
     return jsonify({
-        "sentiment": "positive" if is_positive else "negative" if "neg" in sentiment or sentiment == "0" else sentiment,
+        "sentiment": overall_sentiment,
         "raw_label": label,
         "confidence": confidence,
         "probabilities": probs,
+        "emotions": emotions,
+        "sentences": sentences_out,
     })
 
 
@@ -518,6 +687,94 @@ INDEX_HTML = """
   .prob-bar-fill.positive { background: linear-gradient(90deg, var(--positive), #6ee7b7); }
   .prob-bar-fill.negative { background: linear-gradient(90deg, var(--negative), #fca5a5); }
 
+  /* ---------- Analysis panels (emotions + sentences) ---------- */
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  @media (min-width: 720px) {
+    .analysis-grid { grid-template-columns: 1.1fr 1fr; }
+  }
+
+  .panel {
+    border-radius: var(--radius-md);
+    padding: 20px;
+    border: 1px solid var(--card-border);
+    background: rgba(0,0,0,0.18);
+  }
+  body[data-theme="light"] .panel, body[data-theme="mint"] .panel {
+    background: rgba(255,255,255,0.45);
+  }
+
+  .panel-title {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14.5px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    color: var(--text-main);
+  }
+  .panel-title .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+
+  .chart-wrap { position: relative; width: 100%; height: 240px; }
+
+  .emotion-legend {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 14px;
+  }
+  .emotion-chip {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+  }
+  body[data-theme="light"] .emotion-chip, body[data-theme="mint"] .emotion-chip {
+    background: rgba(255,255,255,0.55);
+  }
+  .emotion-chip .swatch { width: 8px; height: 8px; border-radius: 50%; }
+  .emotion-chip b { color: var(--text-main); font-weight: 600; }
+
+  .sentence-list {
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+  }
+  .sentence-list::-webkit-scrollbar { width: 6px; }
+  .sentence-list::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 999px; }
+
+  .sentence-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  body[data-theme="light"] .sentence-item, body[data-theme="mint"] .sentence-item {
+    background: rgba(255,255,255,0.5);
+  }
+  .sentence-item .s-icon { font-size: 15px; line-height: 1.4; }
+  .sentence-item .s-text { flex: 1; color: var(--text-main); }
+  .sentence-item .s-conf { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .sentence-item.positive { border-left: 3px solid var(--positive); }
+  .sentence-item.negative { border-left: 3px solid var(--negative); }
+
+  .empty-note { font-size: 12.5px; color: var(--text-muted); text-align: center; padding: 20px 0; }
+
   .error-box {
     display: none;
     margin-top: 18px;
@@ -616,12 +873,27 @@ INDEX_HTML = """
         </div>
         <div id="probBars"></div>
       </div>
+
+      <div class="analysis-grid">
+        <div class="panel">
+          <div class="panel-title"><span class="dot"></span> Emotion Breakdown</div>
+          <div class="chart-wrap"><canvas id="emotionChart"></canvas></div>
+          <div class="emotion-legend" id="emotionLegend"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><span class="dot"></span> Sentence-by-Sentence</div>
+          <div class="sentence-list" id="sentenceList">
+            <div class="empty-note">Sentence breakdown will appear here.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="footer">Built with <b>Flask</b> · TF-IDF + Naive Bayes · Crafted for a premium experience</div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script>
   const body = document.body;
   const themeDots = document.querySelectorAll('.theme-dot');
@@ -631,6 +903,7 @@ INDEX_HTML = """
       dot.classList.add('active');
       body.setAttribute('data-theme', dot.dataset.theme);
       localStorage.setItem('sentimentiq-theme', dot.dataset.theme);
+      if (window.lastEmotions) renderEmotionChart(window.lastEmotions);
     });
   });
 
@@ -669,6 +942,106 @@ INDEX_HTML = """
   const badge = document.getElementById('badge');
   const confidenceText = document.getElementById('confidenceText');
   const probBars = document.getElementById('probBars');
+  const emotionLegend = document.getElementById('emotionLegend');
+  const sentenceList = document.getElementById('sentenceList');
+
+  const EMOTION_META = {
+    joy:          { emoji: '😄', color: '#facc15' },
+    trust:        { emoji: '🤝', color: '#34d399' },
+    fear:         { emoji: '😨', color: '#a78bfa' },
+    surprise:     { emoji: '😲', color: '#38bdf8' },
+    sadness:      { emoji: '😢', color: '#60a5fa' },
+    disgust:      { emoji: '🤢', color: '#84cc16' },
+    anger:        { emoji: '😠', color: '#f87171' },
+    anticipation: { emoji: '🤩', color: '#fb923c' },
+  };
+
+  let emotionChart = null;
+
+  function themeColor(varName) {
+    return getComputedStyle(document.body).getPropertyValue(varName).trim();
+  }
+
+  function renderEmotionChart(emotions) {
+    const canvas = document.getElementById('emotionChart');
+    const labels = Object.keys(emotions).map(k => k.charAt(0).toUpperCase() + k.slice(1));
+    const values = Object.values(emotions);
+    const accent = themeColor('--accent') || '#7c5cff';
+    const textMuted = themeColor('--text-muted') || '#b9b4d6';
+    const gridColor = 'rgba(150,150,180,0.18)';
+
+    if (emotionChart) {
+      emotionChart.destroy();
+    }
+    emotionChart = new Chart(canvas.getContext('2d'), {
+      type: 'radar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Emotion intensity',
+          data: values,
+          backgroundColor: accent + '33',
+          borderColor: accent,
+          borderWidth: 2,
+          pointBackgroundColor: accent,
+          pointBorderColor: '#fff',
+          pointRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 700, easing: 'easeOutQuart' },
+        scales: {
+          r: {
+            angleLines: { color: gridColor },
+            grid: { color: gridColor },
+            pointLabels: { color: textMuted, font: { size: 11, family: 'Poppins' } },
+            ticks: { display: false, backdropColor: 'transparent' },
+            suggestedMin: 0,
+            suggestedMax: 100,
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    emotionLegend.innerHTML = '';
+    Object.entries(emotions)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([emo, val]) => {
+        const meta = EMOTION_META[emo] || { emoji: '•', color: accent };
+        const chip = document.createElement('div');
+        chip.className = 'emotion-chip';
+        chip.innerHTML = `<span class="swatch" style="background:${meta.color}"></span> ${meta.emoji} ${emo.charAt(0).toUpperCase() + emo.slice(1)} <b>${val}%</b>`;
+        emotionLegend.appendChild(chip);
+      });
+  }
+
+  function renderSentences(sentences) {
+    sentenceList.innerHTML = '';
+    if (!sentences || sentences.length === 0) {
+      sentenceList.innerHTML = '<div class="empty-note">No individual sentences detected.</div>';
+      return;
+    }
+    sentences.forEach(s => {
+      const isPos = s.sentiment === 'positive';
+      const item = document.createElement('div');
+      item.className = 'sentence-item ' + (isPos ? 'positive' : 'negative');
+      item.innerHTML = `
+        <span class="s-icon">${isPos ? '😊' : '☹️'}</span>
+        <span class="s-text">${escapeHtml(s.text)}</span>
+        <span class="s-conf">${s.confidence != null ? s.confidence + '%' : ''}</span>
+      `;
+      sentenceList.appendChild(item);
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
 
   async function analyze() {
     const text = inputText.value.trim();
@@ -719,6 +1092,9 @@ INDEX_HTML = """
           row.querySelector('.prob-bar-fill').style.width = probs[label] + '%';
         });
       });
+
+      if (data.emotions) { window.lastEmotions = data.emotions; renderEmotionChart(data.emotions); }
+      renderSentences(data.sentences);
 
       resultBox.style.display = 'block';
     } catch (err) {
