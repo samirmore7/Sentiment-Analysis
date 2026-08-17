@@ -129,9 +129,3 @@ Themes are switched via the color-dot picker in the top-right corner and persist
 - **Backend:** Flask, scikit-learn (TfidfVectorizer + MultinomialNB), NumPy, SciPy
 - **Frontend:** Vanilla HTML/CSS/JS (single file, no build step), hand-rolled SVG radar chart
 - **Fonts:** Poppins, Space Grotesk (Google Fonts)
-
----
-
-## 📄 License
-
-This project is provided as-is for personal/portfolio use. Adapt freely.
