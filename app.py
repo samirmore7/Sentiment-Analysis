@@ -137,6 +137,9 @@ INDEX_HTML = """
     --text-muted: #b9b4d6;
     --positive: #34d399;
     --negative: #fb7185;
+    --positive-text: #34d399;
+    --negative-text: #fb7185;
+    --badge-tint: 22%;
     --radius-lg: 24px;
     --radius-md: 16px;
     --radius-sm: 10px;
@@ -202,6 +205,12 @@ INDEX_HTML = """
     --card-border: rgba(6,78,59,0.10);
     --text-main: #0b2e26;
     --text-muted: #4b6e63;
+  }
+
+  body[data-theme="daylight"], body[data-theme="linen"], body[data-theme="mint"] {
+    --positive-text: #047857;
+    --negative-text: #be123c;
+    --badge-tint: 16%;
   }
 
   body[data-theme="daylight"]::before, body[data-theme="daylight"]::after,
@@ -388,7 +397,7 @@ INDEX_HTML = """
     outline: none;
     transition: var(--transition);
   }
-  textarea::placeholder { color: rgba(244,242,255,0.35); }
+  textarea::placeholder { color: var(--text-muted); opacity: 0.7; }
   textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
@@ -484,8 +493,8 @@ INDEX_HTML = """
     font-size: 14px;
     letter-spacing: 0.3px;
   }
-  .badge.positive { background: color-mix(in srgb, var(--positive) 22%, transparent); color: var(--positive); }
-  .badge.negative { background: color-mix(in srgb, var(--negative) 22%, transparent); color: var(--negative); }
+  .badge.positive { background: color-mix(in srgb, var(--positive) var(--badge-tint), transparent); color: var(--positive-text); }
+  .badge.negative { background: color-mix(in srgb, var(--negative) var(--badge-tint), transparent); color: var(--negative-text); }
 
   .confidence-text { font-size: 13px; color: var(--text-muted); }
 
